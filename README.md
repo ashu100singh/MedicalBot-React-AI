@@ -10,17 +10,17 @@
         npm install
 
 # 3) create a .env file in backend folder
-        #and paste you HF api key into that file like this:
-        HF_TOKEN="################"
+        # and paste you HF api key into that file like this:
+               HF_TOKEN="################"
 
 # 4) in backend shell 
-       #Run command  
+       # Run command  
                pipenv shell
-        #then -
+        # then -
                 pipenv run python app.py
 
 # 5) in frontend shell
-       #Run command
+       # Run command
                 npm run dev
 
 # 5) After running contact me on WhatsAPP
