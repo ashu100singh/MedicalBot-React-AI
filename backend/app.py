@@ -1,10 +1,10 @@
 from flask import Flask, request, jsonify
 import os
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import RetrievalQA
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
-from langchain_huggingface import HuggingFaceEndpoint
+from huggingface_hub import InferenceClient
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -20,21 +20,16 @@ def get_vectorstore():
 def set_custom_prompt(custom_prompt_template):
     return PromptTemplate(template=custom_prompt_template, input_variables=["context", "question"])
 
-def load_llm(huggingface_repo_id, HF_TOKEN):
-    return HuggingFaceEndpoint(
-        repo_id=huggingface_repo_id,
-        task="text-generation",
-        temperature=0.5,
-        huggingfacehub_api_token=HF_TOKEN,
-        max_new_tokens=512,
-    )
+def generate_response_with_hf(prompt, hf_token, model_name):
+    client = InferenceClient(model_name, token=hf_token) 
+    return client.text_generation(prompt=prompt, max_new_tokens=512, temperature=0.5)
 
 @app.route("/api/query", methods=["POST"])
 def query():
     try:
         user_query = request.json.get('query')
         HF_TOKEN = os.environ.get("HF_TOKEN")
-        huggingface_repo_id = "mistralai/Mistral-7B-Instruct-v0.3"
+        model_name = "mistralai/Mistral-7B-Instruct-v0.3"
 
         custom_prompt_template = """
             Use only the information provided in the context to answer the user's question.
@@ -51,16 +46,12 @@ def query():
         if vectorstore is None:
             return jsonify({"error": "Failed to load the vector store"}), 500
 
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=load_llm(huggingface_repo_id=huggingface_repo_id, HF_TOKEN=HF_TOKEN),
-            chain_type="stuff",
-            retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
-            return_source_documents=True,
-            chain_type_kwargs={'prompt': set_custom_prompt(custom_prompt_template)}
-        )
+        retriever = vectorstore.as_retriever(search_kwargs={'k': 3})
+        relevant_docs = retriever.invoke(user_query)  # ✅ updated method
+        context = "\n\n".join([doc.page_content for doc in relevant_docs])
 
-        response = qa_chain.invoke({'query': user_query})
-        result = response["result"]
+        prompt = custom_prompt_template.replace("{context}", context).replace("{question}", user_query)
+        result = generate_response_with_hf(prompt, HF_TOKEN, model_name)
 
         return jsonify({"result": result}), 200
 
