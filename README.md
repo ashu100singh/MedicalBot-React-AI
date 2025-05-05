@@ -4,6 +4,7 @@
         cd backend
         pip install pipenv
         pipenv install langchain langchain_community langchain_huggingface faiss-cpu pypdf huggingface_hub
+        pipenv install flask flask-cors
 
 # 2) install dependencies (in frontend)
         cd frontend
