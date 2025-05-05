@@ -17,39 +17,37 @@ def get_vectorstore():
     db = FAISS.load_local(DB_FAISS_PATH, embedding_model, allow_dangerous_deserialization=True)
     return db
 
-def set_custom_prompt(custom_prompt_template):
-    return PromptTemplate(template=custom_prompt_template, input_variables=["context", "question"])
-
 def generate_response_with_hf(prompt, hf_token, model_name):
-    client = InferenceClient(model_name, token=hf_token) 
+    client = InferenceClient(model_name, token=hf_token)
     return client.text_generation(prompt=prompt, max_new_tokens=512, temperature=0.5)
 
 @app.route("/api/query", methods=["POST"])
 def query():
     try:
         user_query = request.json.get('query')
+        if not user_query:
+            return jsonify({"error": "Empty query received."}), 400
+
         HF_TOKEN = os.environ.get("HF_TOKEN")
         model_name = "mistralai/Mistral-7B-Instruct-v0.3"
 
+        # Prompt template
         custom_prompt_template = """
-            Use only the information provided in the context to answer the user's question.
-            If the answer is not found within the context, say "I don't know". Do not try to provide an answer outside the context.
+        Use only the information provided in the context to answer the user's question.
+        If the answer is not found within the context, say "I don't know". Do not try to provide an answer outside the context.
 
-            Context: {context}
-            Question: {question}
+        Context: {context}
+        Question: {question}
 
-            Start the answer directly. No small talk please.
-            Provide a concise and accurate answer. Avoid any generalizations or assumptions.
+        Start the answer directly. No small talk please.
+        Provide a concise and accurate answer. Avoid any generalizations or assumptions.
         """
 
         vectorstore = get_vectorstore()
-        if vectorstore is None:
-            return jsonify({"error": "Failed to load the vector store"}), 500
-
         retriever = vectorstore.as_retriever(search_kwargs={'k': 3})
-        relevant_docs = retriever.invoke(user_query)  # ✅ updated method
-        context = "\n\n".join([doc.page_content for doc in relevant_docs])
+        relevant_docs = retriever.invoke(user_query)
 
+        context = "\n\n".join([doc.page_content for doc in relevant_docs])
         prompt = custom_prompt_template.replace("{context}", context).replace("{question}", user_query)
         result = generate_response_with_hf(prompt, HF_TOKEN, model_name)
 
